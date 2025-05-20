@@ -5,73 +5,94 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config represents the main configuration structure
 type Config struct {
-	Discord    DiscordConfig `json:"discord"`
-	Docker     DockerConfig  `json:"docker,omitempty"`
-	Logs       LogConfig     `json:"logs,omitempty"`
-	Commands   []Command     `json:"commands"`
-	WorkingDir string        `json:"workingDir,omitempty"`
+	Discord    DiscordConfig `json:"discord" yaml:"discord"`
+	Docker     DockerConfig  `json:"docker,omitempty" yaml:"docker,omitempty"`
+	Logs       LogConfig     `json:"logs,omitempty" yaml:"logs,omitempty"`
+	Commands   []Command     `json:"commands" yaml:"commands"`
+	WorkingDir string        `json:"workingDir,omitempty" yaml:"workingDir,omitempty"`
 }
 
 // DiscordConfig holds Discord integration settings
 type DiscordConfig struct {
-	Token     string `json:"token"`
-	ChannelID string `json:"channelId"`
+	Token     string `json:"token" yaml:"token"`
+	ChannelID string `json:"channelId" yaml:"channelId"`
 }
 
 // DockerConfig holds Docker-specific settings
 type DockerConfig struct {
-	Host string `json:"host,omitempty"`
+	Host string `json:"host,omitempty" yaml:"host,omitempty"`
 }
 
 // LogConfig holds logging configuration
 type LogConfig struct {
-	Directory string `json:"directory,omitempty"`  // Directory to store log files
-	MaxSize   int    `json:"maxSize,omitempty"`    // Maximum size in MB before rotation
-	MaxAge    int    `json:"maxAge,omitempty"`     // Maximum age in days before deletion
-	MaxBackups int   `json:"maxBackups,omitempty"` // Maximum number of backups to keep
-	Compress  bool   `json:"compress,omitempty"`   // Whether to compress rotated files
+	Directory string `json:"directory,omitempty" yaml:"directory,omitempty"`  // Directory to store log files
+	MaxSize   int    `json:"maxSize,omitempty" yaml:"maxSize,omitempty"`    // Maximum size in MB before rotation
+	MaxAge    int    `json:"maxAge,omitempty" yaml:"maxAge,omitempty"`     // Maximum age in days before deletion
+	MaxBackups int   `json:"maxBackups,omitempty" yaml:"maxBackups,omitempty"` // Maximum number of backups to keep
+	Compress  bool   `json:"compress,omitempty" yaml:"compress,omitempty"`   // Whether to compress rotated files
 }
 
 // Command represents a command to be executed
 type Command struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Command     string   `json:"command"`
-	Args        []string `json:"args,omitempty"`
-	Dir         string   `json:"dir,omitempty"`
-	EnvVars     []string `json:"envVars,omitempty"`
+	Name        string   `json:"name" yaml:"name"`
+	Description string   `json:"description" yaml:"description"`
+	Command     string   `json:"command" yaml:"command"`
+	Args        []string `json:"args,omitempty" yaml:"args,omitempty"`
+	Dir         string   `json:"dir,omitempty" yaml:"dir,omitempty"`
+	EnvVars     []string `json:"envVars,omitempty" yaml:"envVars,omitempty"`
 }
 
 // Variables pour stocker le chemin du fichier de configuration chargé
 var loadedConfigPath string
 
-// DefaultConfigPath returns the default config file path
+// DefaultConfigPath returns the default config file paths in order of preference
 func DefaultConfigPath() string {
-	// First try current directory
+	// Try YAML first in current directory
+	if _, err := os.Stat("config.yml"); err == nil {
+		return "config.yml"
+	}
+	
+	// Then try JSON in current directory
 	if _, err := os.Stat("config.json"); err == nil {
 		return "config.json"
 	}
 	
-	// Then try home directory
+	// Then try in home directory
 	home, err := os.UserHomeDir()
 	if err == nil {
-		homeCfg := filepath.Join(home, ".delivr", "config.json")
-		if _, err := os.Stat(homeCfg); err == nil {
-			return homeCfg
+		// Try YAML in home directory
+		homeYamlCfg := filepath.Join(home, ".delivr", "config.yml")
+		if _, err := os.Stat(homeYamlCfg); err == nil {
+			return homeYamlCfg
+		}
+		
+		// Try JSON in home directory
+		homeJsonCfg := filepath.Join(home, ".delivr", "config.json")
+		if _, err := os.Stat(homeJsonCfg); err == nil {
+			return homeJsonCfg
 		}
 	}
 	
-	// Default to current directory anyway
-	return "config.json"
+	// Default to current directory YAML
+	return "config.yml"
 }
 
 // GetLoadedConfigPath returns the path of the loaded configuration file
 func GetLoadedConfigPath() string {
 	return loadedConfigPath
+}
+
+// isYAMLFile checks if a path has a YAML extension
+func isYAMLFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".yml" || ext == ".yaml"
 }
 
 // Load loads the configuration from file
@@ -97,8 +118,17 @@ func Load(customPath string) (*Config, error) {
 	}
 	
 	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
+	
+	// Determine if it's a YAML file and use appropriate unmarshal
+	if isYAMLFile(configPath) {
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("error parsing YAML config: %w", err)
+		}
+	} else {
+		// Assume JSON
+		if err := json.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("error parsing JSON config: %w", err)
+		}
 	}
 	
 	// Store the loaded config path
@@ -109,9 +139,21 @@ func Load(customPath string) (*Config, error) {
 
 // Save saves the configuration to file
 func Save(config *Config, path string) error {
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
+	var data []byte
+	var err error
+	
+	// Determine format based on file extension
+	if isYAMLFile(path) {
+		data, err = yaml.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("error encoding YAML: %w", err)
+		}
+	} else {
+		// Default to JSON
+		data, err = json.MarshalIndent(config, "", "  ")
+		if err != nil {
+			return fmt.Errorf("error encoding JSON: %w", err)
+		}
 	}
 	
 	// Ensure directory exists

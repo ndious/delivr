@@ -1,4 +1,6 @@
-config.{json,yml,yaml}
+config.json
+config.yml
+config.yaml
 logs
 delivr
 builds
