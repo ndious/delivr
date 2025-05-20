@@ -13,15 +13,14 @@ import (
 // Config represents the main configuration structure
 type Config struct {
 	Discord    DiscordConfig `json:"discord" yaml:"discord"`
-	Docker     DockerConfig  `json:"docker,omitempty" yaml:"docker,omitempty"`
-	Logs       LogConfig     `json:"logs,omitempty" yaml:"logs,omitempty"`
+	Docker     *DockerConfig `json:"docker,omitempty" yaml:"docker,omitempty"`
+	Logs       *LogConfig    `json:"logs,omitempty" yaml:"logs,omitempty"`
 	Commands   []Command     `json:"commands" yaml:"commands"`
 	WorkingDir string        `json:"workingDir,omitempty" yaml:"workingDir,omitempty"`
 }
 
 // DiscordConfig holds Discord integration settings
 type DiscordConfig struct {
-	Token     string `json:"token" yaml:"token"`
 	ChannelID string `json:"channelId" yaml:"channelId"`
 }
 
@@ -54,12 +53,22 @@ var loadedConfigPath string
 
 // DefaultConfigPath returns the default config file paths in order of preference
 func DefaultConfigPath() string {
-	// Try YAML first in current directory
+	// Try hidden .delivr.yml first in current directory
+	if _, err := os.Stat(".delivr.yml"); err == nil {
+		return ".delivr.yml"
+	}
+	
+	// Try hidden .delivr.json in current directory
+	if _, err := os.Stat(".delivr.json"); err == nil {
+		return ".delivr.json"
+	}
+
+	// Try standard YAML in current directory
 	if _, err := os.Stat("config.yml"); err == nil {
 		return "config.yml"
 	}
 	
-	// Then try JSON in current directory
+	// Try standard JSON in current directory
 	if _, err := os.Stat("config.json"); err == nil {
 		return "config.json"
 	}
@@ -80,8 +89,8 @@ func DefaultConfigPath() string {
 		}
 	}
 	
-	// Default to current directory YAML
-	return "config.yml"
+	// Default to current directory .delivr.yml
+	return ".delivr.yml"
 }
 
 // GetLoadedConfigPath returns the path of the loaded configuration file
@@ -105,6 +114,20 @@ func Load(customPath string) (*Config, error) {
 	} else if envPath := os.Getenv("DELIVR_CONFIG"); envPath != "" {
 		// Check if config path is overridden by environment
 		configPath = envPath
+	}
+	
+	// If using the default path and the file doesn't exist, check for deprecated config names
+	if customPath == "" && os.Getenv("DELIVR_CONFIG") == "" {
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			// Warn user if we find a deprecated config file name
+			if _, err := os.Stat("config.yml"); err == nil {
+				fmt.Printf("Warning: Using deprecated config name 'config.yml'. Consider renaming to '.delivr.yml'\n")
+				configPath = "config.yml"
+			} else if _, err := os.Stat("config.json"); err == nil {
+				fmt.Printf("Warning: Using deprecated config name 'config.json'. Consider renaming to '.delivr.json'\n")
+				configPath = "config.json"
+			}
+		}
 	}
 	
 	// Vérifier que le fichier existe
@@ -167,22 +190,27 @@ func Save(config *Config, path string) error {
 
 // CreateDefaultConfig creates a default configuration file
 func CreateDefaultConfig(path string) error {
+	// Create Docker config
+	dockerConfig := &DockerConfig{
+		Host: "unix:///var/run/docker.sock",
+	}
+
+	// Create Logs config
+	logsConfig := &LogConfig{
+		Directory: "./logs",
+		MaxSize:   10,
+		MaxAge:    30,
+		MaxBackups: 5,
+		Compress:  true,
+	}
+
 	// Create a default configuration
 	defaultConfig := &Config{
 		WorkingDir: "",
-		Docker: DockerConfig{
-			Host: "unix:///var/run/docker.sock",
-		},
-		Logs: LogConfig{
-			Directory: "./logs",
-			MaxSize:   10,
-			MaxAge:    30,
-			MaxBackups: 5,
-			Compress:  true,
-		},
+		Docker: dockerConfig,
+		Logs: logsConfig,
 		Discord: DiscordConfig{
-			Token:     "YOUR_DISCORD_BOT_TOKEN_HERE",
-			ChannelID: "YOUR_DISCORD_CHANNEL_ID_OR_WEBHOOK_URL_HERE",
+			ChannelID: "YOUR_DISCORD_WEBHOOK_URL_HERE",
 		},
 		Commands: []Command{
 			{

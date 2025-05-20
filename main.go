@@ -17,9 +17,9 @@ import (
 func main() {
 	// Parse command line flags
 	daemonMode := flag.Bool("daemon", false, "Run in daemon mode (don't exit after running commands)")
-	configPath := flag.String("config", "", "Path to the configuration file (default: config.json in the current directory or ~/.delivr/config.json)")
+	configPath := flag.String("config", "", "Path to the configuration file (default: .delivr.yml in the current directory)")
 	initConfig := flag.Bool("init", false, "Generate a default configuration file")
-	outPath := flag.String("out", "config.json", "Path for the generated configuration file when using --init")
+	outPath := flag.String("out", ".delivr.yml", "Path for the generated configuration file when using --init")
 	flag.Parse()
 
 	// Check if we should generate a default configuration file
@@ -44,8 +44,8 @@ func main() {
 
 	log.Printf("Configuration loaded from: %s", config.GetLoadedConfigPath())
 
-	// Initialize Discord client
-	discord, err := discord.NewClient(cfg.Discord.Token, cfg.Discord.ChannelID)
+	// Initialize Discord client with webhook URL
+	discord, err := discord.NewClient(cfg.Discord.ChannelID)
 	if err != nil {
 		log.Fatalf("Failed to initialize Discord client: %v", err)
 	}
@@ -55,8 +55,21 @@ func main() {
 		log.Printf("Warning: Could not send startup message: %v", err)
 	}
 
-	// Initialize logger
-	cmdLogger, err := logger.NewCommandLogger(cfg.Logs)
+	// Initialize logger with default values if not provided
+	var logConfig config.LogConfig
+	if cfg.Logs != nil {
+		logConfig = *cfg.Logs
+	} else {
+		// Use default log configuration
+		logConfig = config.LogConfig{
+			Directory: "./logs",
+			MaxSize:   10,
+			MaxAge:    30,
+			MaxBackups: 5,
+			Compress:  true,
+		}
+	}
+	cmdLogger, err := logger.NewCommandLogger(logConfig)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -64,7 +77,7 @@ func main() {
 
 	// Initialize Docker runner with the global working directory and docker host
 	dockerHost := ""
-	if cfg.Docker.Host != "" {
+	if cfg.Docker != nil && cfg.Docker.Host != "" {
 		dockerHost = cfg.Docker.Host
 	}
 	cmdRunner := command.NewRunner(discord, cmdLogger, cfg.WorkingDir, dockerHost)

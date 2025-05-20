@@ -11,11 +11,8 @@ import (
 
 // Client handles Discord API interactions
 type Client struct {
-	// For webhook
+	// Discord webhook URL
 	webhookURL string
-	
-	// For bot (legacy support)
-	isWebhook bool
 }
 
 // Message represents a Discord message
@@ -42,30 +39,26 @@ type EmbedField struct {
 }
 
 // NewClient creates a new Discord client
-func NewClient(token, channelID string) (*Client, error) {
-	if token == "" && channelID == "" {
-		return nil, errors.New("either discord token or channel ID (webhook URL) is required")
+func NewClient(webhookURL string) (*Client, error) {
+	if webhookURL == "" {
+		return nil, errors.New("discord webhook URL is required")
 	}
 
-	client := &Client{}
-	
-	// Check if channelID is actually a webhook URL
-	if strings.HasPrefix(channelID, "https://discord.com/api/webhooks/") {
-		client.webhookURL = channelID
-		client.isWebhook = true
-		return client, nil
+	// Check if webhookURL is actually a webhook URL
+	if !strings.HasPrefix(webhookURL, "https://discord.com/api/webhooks/") {
+		return nil, errors.New("invalid webhook URL format, must start with https://discord.com/api/webhooks/")
 	}
 
-	// For now, we only support webhooks
-	return nil, errors.New("only webhook URLs are supported in this version")
+	client := &Client{
+		webhookURL: webhookURL,
+	}
+
+	return client, nil
 }
 
-// SendMessage sends a message to Discord
+// SendMessage sends a message to Discord via webhook
 func (c *Client) SendMessage(content string) error {
-	if c.isWebhook {
-		return c.sendWebhookMessage(content)
-	}
-	return errors.New("only webhook messages are supported in this version")
+	return c.sendWebhookMessage(content)
 }
 
 // sendWebhookMessage sends a message via webhook

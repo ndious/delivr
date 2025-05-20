@@ -7,11 +7,13 @@ A simple Go application that executes commands (Docker, Git, or any other CLI to
 ## Features
 
 - Execute various types of commands (Docker, Git, etc.)
-- Send command output to Discord via bot token or webhook
+- Send command output to Discord via webhook
 - Log command outputs to files with automatic rotation
-- Configure via JSON with support for custom paths
+- Configure via JSON or YAML with support for custom paths
+- Flexible configuration with optional sections
 - Error handling and comprehensive reporting
 - One-time execution or daemon mode
+- Automated builds with GitHub Actions
 
 ## Installation
 
@@ -35,12 +37,12 @@ Generate a default configuration file:
 ./delivr --init
 ```
 
-Edit the generated `config.json` file with your Discord token or webhook URL and customize your commands.
+Edit the generated configuration file `.delivr.yml` avec your Discord webhook URL and customize your commands.
 
 ## Usage
 
 ```bash
-# Run with default config file (config.json in current directory or ~/.delivr/config.json)
+# Run with default config file (.delivr.yml or .delivr.json in current directory)
 ./delivr
 
 # Specify a custom config file
@@ -53,12 +55,56 @@ Edit the generated `config.json` file with your Discord token or webhook URL and
 ./delivr --init
 
 # Generate a configuration file at a specific location
-./delivr --init --out /path/to/new/config.json
+./delivr --init --out /path/to/new/.delivr.yml
 ```
 
 ## Configuration
 
-The configuration file has the following structure:
+The configuration file supports both JSON and YAML formats. The application will look for configuration files in the following order:
+
+1. `.delivr.yml` in the current directory
+2. `.delivr.json` in the current directory
+3. `config.yml` in the current directory (deprecated)
+4. `config.json` in the current directory (deprecated)
+5. `config.yml` in the user's home directory under `.delivr/`
+6. `config.json` in the user's home directory under `.delivr/`
+
+### YAML Configuration Example (Recommended)
+
+```yaml
+# Optional working directory for commands
+workingDir: /path/to/your/working/directory
+
+# Optional Docker configuration
+docker:
+  host: unix:///var/run/docker.sock
+
+# Optional logging configuration
+logs:
+  directory: ./logs
+  maxSize: 10
+  maxAge: 30
+  maxBackups: 5
+  compress: true
+
+# Discord webhook configuration (required)
+discord:
+  channelId: https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
+
+# Commands to execute (required)
+commands:
+  - name: Show Docker Status
+    description: Lists all running Docker containers
+    command: docker
+    args: [ps, -a]
+  
+  - name: Git Status
+    description: Shows the working tree status
+    command: git
+    args: [status]
+```
+
+### JSON Configuration Example
 
 ```json
 {
@@ -74,8 +120,7 @@ The configuration file has the following structure:
     "compress": true
   },
   "discord": {
-    "token": "YOUR_DISCORD_BOT_TOKEN_HERE",
-    "channelId": "YOUR_DISCORD_CHANNEL_ID_OR_WEBHOOK_URL"
+    "channelId": "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
   },
   "commands": [
     {
@@ -98,13 +143,14 @@ The configuration file has the following structure:
 
 #### Main Configuration
 
-| Field | Description | Default |
-|-------|-------------|--------|
-| `workingDir` | Global working directory for commands | Current directory |
-| `docker.host` | Docker daemon socket | `unix:///var/run/docker.sock` |
-| `commands` | Array of commands to execute | [] |
+| Field | Description | Default | Required |
+|-------|-------------|---------|----------|
+| `workingDir` | Global working directory for commands | Current directory | No |
+| `docker.host` | Docker daemon socket | `unix:///var/run/docker.sock` | No |
+| `discord.channelId` | Discord webhook URL | None | Yes |
+| `commands` | Array of commands to execute | [] | Yes |
 
-#### Logging Configuration
+#### Logging Configuration (Optional)
 
 | Field | Description | Default |
 |-------|-------------|--------|
@@ -127,15 +173,26 @@ The configuration file has the following structure:
 
 ### Discord Integration
 
-Delivr supports two methods of Discord integration:
+Delivr works with Discord webhooks. Simply create a webhook in your Discord channel and paste the URL in the `channelId` field of your configuration file.
 
-1. **Discord Webhook URL**: The easiest method. Simply create a webhook in your Discord channel and paste the URL in the `channelId` field.
+To create a webhook in Discord:
 
-2. **Discord Bot**: For more advanced functionality (not currently implemented). Create a bot through the Discord Developer Portal and paste the token in the `token` field.
+1. Go to your Discord server
+2. Edit a channel
+3. Select 'Integrations'
+4. Click 'Webhooks'
+5. Click 'New Webhook'
+6. Copy the webhook URL
 
 ## Environment Variables
 
 - `DELIVR_CONFIG`: Path to the config file (overrides the default location)
+
+## GitHub Actions Integration
+
+This project includes a GitHub Actions workflow that automatically builds the application for Linux (AMD64) on each push or pull request to the main branch. Tagged versions will include the tag name in the built binary filename.
+
+The workflow is defined in `.github/workflows/build.yml`.
 
 ## Log Files
 
@@ -144,6 +201,21 @@ Each command generates its own log file in the format `command-name-YYYY-MM-DD.l
 - Command execution details (time, arguments, working directory)
 - Complete stdout and stderr output
 - Execution status and duration
+
+## Minimal Configuration Example
+
+The following is a minimal configuration example with only the required fields:
+
+```yaml
+discord:
+  channelId: https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
+
+commands:
+  - name: Git Status
+    description: Shows git status
+    command: git
+    args: [status]
+```
 
 ## Credits
 

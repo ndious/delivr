@@ -4,3 +4,7 @@ config.yaml
 logs
 delivr
 builds
+.delivr.yml
+.delivr.json
+.delivr.yaml
+
